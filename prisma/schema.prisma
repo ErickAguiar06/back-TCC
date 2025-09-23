@@ -1,11 +1,12 @@
 datasource db {
-  provider = "mysql"
-  url      = "mysql://root@localhost:3306/petshop?schema=public&timezone=UTC"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
 }
+
 
 enum Tipo {
   ADMIN
