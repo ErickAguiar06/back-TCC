@@ -1,13 +1,14 @@
 {
   "name": "api",
   "version": "1.0.0",
-  "main": "server.js",
+    "main": "api/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
-    "postinstall": "prisma generate && prisma migrate deploy",
-    "seed": "node prisma/seed.js"
+    "dev": "npx nodemon api/server.js",
+    "postinstall": "prisma generate",
+    "migrate:dev": "prisma migrate dev --name init",
+    "migrate:deploy": "prisma migrate deploy"
   },
+
   "author": "",
   "license": "ISC",
   "dependencies": {
