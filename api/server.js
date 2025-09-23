@@ -14,7 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 // Rotas existentes
-const rota = require('./src/routes');
+const rota = require('../src/routes');
 app.use('/', rota);
 
 // Rota de recuperação de senha
