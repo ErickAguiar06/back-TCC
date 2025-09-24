@@ -1,17 +1,27 @@
 // controllers/pedido.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const axios = require('axios');
+
+const asaas = axios.create({
+  baseURL: process.env.ASAAS_BASE_URL,
+  headers: {
+    Authorization: `Bearer ${process.env.ASAAS_API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+});
 
 module.exports = {
-  // Criar pedido (qualquer usuário logado)
+  // Criar pedido e gerar pagamento na Asaas
   async create(req, res) {
     try {
-      const { usuarioId, itens } = req.body;
+      const { usuarioId, itens, metodoPagamento } = req.body;
 
       if (!usuarioId || !Array.isArray(itens) || itens.length === 0) {
         return res.status(400).json({ error: "Dados inválidos." });
       }
 
+      // Salva o pedido no banco
       const pedido = await prisma.pedido.create({
         data: {
           usuarioId,
@@ -23,19 +33,62 @@ module.exports = {
           },
         },
         include: {
-          itens: { include: { produto: true } }, // já retorna info dos produtos
+          itens: { include: { produto: true } },
           usuario: true,
         },
       });
 
-      res.status(201).json(pedido);
+      // Calcula o valor total do pedido
+      const valorTotal = pedido.itens.reduce(
+        (soma, item) => soma + (item.produto.preco * item.quantidade),
+        0
+      );
+
+      // 🔑 Busca ou cria cliente no Asaas
+      let clienteAsaas;
+      try {
+        const { data } = await asaas.get(`/customers?cpfCnpj=${pedido.usuario.cpf}`);
+        if (data.data.length > 0) {
+          clienteAsaas = data.data[0];
+        } else {
+          const { data: novoCliente } = await asaas.post("/customers", {
+            name: pedido.usuario.nome,
+            email: pedido.usuario.email,
+            cpfCnpj: pedido.usuario.cpf,
+            phone: pedido.usuario.telefone,
+          });
+          clienteAsaas = novoCliente;
+        }
+      } catch (err) {
+        console.error("Erro ao criar/buscar cliente Asaas:", err.response?.data || err.message);
+        return res.status(500).json({ error: "Erro na integração com Asaas (cliente)." });
+      }
+
+      // 🔑 Cria pagamento no Asaas
+      try {
+        const { data: pagamento } = await asaas.post("/payments", {
+          customer: clienteAsaas.id,
+          billingType: metodoPagamento || "PIX", // PIX, BOLETO, CREDIT_CARD
+          value: valorTotal,
+          dueDate: new Date().toISOString().split("T")[0], // hoje
+          description: `Pedido #${pedido.id} - Petshop`,
+        });
+
+        return res.status(201).json({
+          pedido,
+          pagamentoAsaas: pagamento,
+        });
+      } catch (err) {
+        console.error("Erro ao criar pagamento Asaas:", err.response?.data || err.message);
+        return res.status(500).json({ error: "Erro ao gerar pagamento no Asaas." });
+      }
     } catch (error) {
       console.error("Erro ao criar pedido:", error);
       res.status(500).json({ error: "Erro ao criar pedido.", detalhes: error.message });
     }
   },
 
-  // Listar todos os pedidos (ADMIN)
+  // Listar pedidos (ADMIN)
   async listarTodos(req, res) {
     try {
       const pedidos = await prisma.pedido.findMany({
@@ -61,7 +114,7 @@ module.exports = {
         where: { id: parseInt(id) },
         data: {
           itens: {
-            deleteMany: {}, // remove os itens antigos
+            deleteMany: {},
             create: itens.map(item => ({
               produtoId: item.id,
               quantidade: item.quantidade,
