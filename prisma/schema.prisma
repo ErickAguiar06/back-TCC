@@ -49,4 +49,4 @@ model PedidoProduto {
 
   pedido     Pedido  @relation(fields: [pedidoId], references: [id])
   produto    Produto @relation(fields: [produtoId], references: [id])
-}
+  }
