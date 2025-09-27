@@ -1,6 +1,6 @@
 // controllers/pedido.js
 const prisma = require('../connect'); // usa o mesmo prisma do usuario.js
-const asaas = require("../services/asaas"); // nossa instância configurada
+const asaas = require("../../services/asaas"); // nossa instância configurada
 
 module.exports = {
   // Criar pedido e gerar pagamento no Asaas
