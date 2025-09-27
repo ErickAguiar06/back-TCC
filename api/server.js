@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
 const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
@@ -8,10 +7,13 @@ require('dotenv').config();
 const prisma = new PrismaClient();
 const app = express();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5500',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
+
 
 // Rotas existentes
 const rota = require('../src/routes');

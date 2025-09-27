@@ -5,6 +5,7 @@ const rota = express.Router();
 const usu = require('./controllers/usuario');
 const produto = require('./controllers/produto');
 const pedido = require('./controllers/pedido');
+const webhookController = require('./controllers/webhook');
 
 // Middleware
 const { autenticarJWT, verificarAdmin } = require('./middleware/auth'); 
@@ -35,5 +36,11 @@ rota.put('/pedidos/:id', autenticarJWT, verificarAdmin, pedido.update);
 // 🔒 apenas ADMIN altera pedidos
 rota.delete('/pedidos/:id', autenticarJWT, verificarAdmin, pedido.remove); 
 // 🔒 apenas ADMIN remove pedidos
+
+// 🧠 Webhook do Asaas (não precisa de autenticação)
+rota.post('/webhook/asaas', express.json(), webhookController.receberWebhook);
+
+// 🔒 qualquer usuário logado vê seus próprios pedidos
+rota.get('/meus-pedidos', autenticarJWT, pedido.listarPorUsuario);
 
 module.exports = rota;

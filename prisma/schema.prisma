@@ -33,11 +33,12 @@ model Produto {
 }
 
 model Pedido {
-  id         Int              @id @default(autoincrement())
-  data       DateTime         @default(now())
+  id         Int       @id @default(autoincrement())
   usuarioId  Int
-  usuario    Usuario          @relation(fields: [usuarioId], references: [id])
-  itens      PedidoProduto[]
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id])
+  itens      ItemPedido[]
+  status     String    @default("PENDENTE")
+  createdAt  DateTime  @default(now())
 }
 
 model PedidoProduto {
