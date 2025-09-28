@@ -59,29 +59,30 @@ app.post('/recuperar-senha', async (req, res) => {
   }
 });
 
-// Rota do Stripe
-app.post('/create-checkout-session', async (req, res) => {
-  const carrinho = req.body.carrinho;
-  const line_items = carrinho.map(produto => ({
-    price_data: {
-      currency: 'brl',
-      product_data: {
-        name: produto.nome,
-        description: produto.descricao,
-      },
-      unit_amount: Math.round(produto.preco * 100),
-    },
-    quantity: produto.quantidade,
-  }));
+const axios = require('axios');
 
-  const session = await stripe.checkout.sessions.create({
-    line_items,
-    mode: 'payment',
-    ui_mode: 'embedded',
-    return_url: 'http://localhost:5500/front/checkout-retorno.html?session_id={CHECKOUT_SESSION_ID}'
-  });
+app.post('/create-payment', async (req, res) => {
+  const { carrinho, cliente } = req.body;
 
-  res.send({ clientSecret: session.client_secret });
+  try {
+    // Montar itens para Asaas
+    const valorTotal = carrinho.reduce((total, p) => total + p.preco * p.quantidade, 0);
+
+    const response = await axios.post(`${process.env.ASAAS_BASE_URL}/payments`, {
+      customer: cliente.idAsaas, // ID do cliente na Asaas
+      billingType: 'PIX', // ou CREDIT_CARD
+      value: valorTotal,
+      dueDate: new Date().toISOString().split('T')[0],
+      description: 'Pedido Petshop 4 Patas'
+    }, {
+      headers: { 'access_token': process.env.ASAAS_API_KEY }
+    });
+
+    res.json({ paymentId: response.data.id, status: response.data.status });
+  } catch (err) {
+    console.error(err.response?.data || err);
+    res.status(500).json({ error: 'Erro ao criar pagamento Asaas' });
+  }
 });
 
 app.listen(3000, () => {
