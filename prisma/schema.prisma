@@ -7,7 +7,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-
 enum Tipo {
   ADMIN
   CLIENTE
@@ -24,7 +23,7 @@ model Usuario {
 }
 
 model Produto {
-  id        Int              @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   nome      String
   descricao String
   preco     Float
@@ -32,21 +31,21 @@ model Produto {
   itens     PedidoProduto[]
 }
 
-model Pedido {  
-  id         Int       @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario   @relation(fields: [usuarioId], references: [id])
-  itens      ItemPedido[]
-  status     String    @default("PENDENTE")
-  createdAt  DateTime  @default(now())
+model Pedido {
+  id        Int             @id @default(autoincrement())
+  usuarioId Int
+  usuario   Usuario         @relation(fields: [usuarioId], references: [id])
+  itens     PedidoProduto[]
+  status    String          @default("PENDENTE")
+  createdAt DateTime        @default(now())
 }
 
 model PedidoProduto {
-  id         Int     @id @default(autoincrement())
+  id         Int @id @default(autoincrement())
   pedidoId   Int
   produtoId  Int
   quantidade Int
 
-  pedido     Pedido  @relation(fields: [pedidoId], references: [id])
-  produto    Produto @relation(fields: [produtoId], references: [id])
-  }
+  pedido  Pedido  @relation(fields: [pedidoId], references: [id])
+  produto Produto @relation(fields: [produtoId], references: [id])
+}
