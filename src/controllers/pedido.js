@@ -70,17 +70,15 @@ module.exports = {
         dueDate: new Date().toISOString().split("T")[0],
         description: `Pedido #${pedido.id} - Petshop`,
         externalReference: `pedido_${pedido.id}`,
-        callbackUrl: "https://back-tcc.vercel.app/webhook/asaas" // webhook opcional
+        callbackUrl: "https://back-tcc.vercel.app/webhook/asaas"
       });
 
       const pagamento = paymentResp.data;
 
-      // 5️⃣ Atualizar status do pedido com referência do pagamento
+      // 5️⃣ Atualizar status do pedido
       await prisma.pedido.update({
         where: { id: pedido.id },
-        data: {
-          status: "AGUARDANDO_PAGAMENTO"
-        }
+        data: { status: "AGUARDANDO_PAGAMENTO" }
       });
 
       return res.status(201).json({
@@ -109,11 +107,59 @@ module.exports = {
         include: { itens: { include: { produto: true } } },
         orderBy: { createdAt: 'desc' }
       });
-
       return res.json(pedidos);
     } catch (error) {
       console.error("❌ Erro ao listar pedidos:", error.message);
       return res.status(500).json({ error: "Erro ao buscar seus pedidos." });
+    }
+  },
+
+  // 📜 Listar todos os pedidos (ADMIN)
+  async listarTodos(req, res) {
+    try {
+      const pedidos = await prisma.pedido.findMany({
+        include: {
+          usuario: { select: { nome: true, email: true } },
+          itens: { include: { produto: true } }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+      return res.json(pedidos);
+    } catch (error) {
+      console.error("❌ Erro ao listar todos os pedidos:", error.message);
+      return res.status(500).json({ error: "Erro ao listar pedidos." });
+    }
+  },
+
+  // ✏️ Atualizar pedido (ADMIN)
+  async update(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const pedidoAtualizado = await prisma.pedido.update({
+        where: { id: parseInt(id) },
+        data: { status },
+        include: { itens: { include: { produto: true } } }
+      });
+
+      return res.json(pedidoAtualizado);
+    } catch (error) {
+      console.error("❌ Erro ao atualizar pedido:", error.message);
+      return res.status(500).json({ error: "Erro ao atualizar pedido." });
+    }
+  },
+
+  // 🗑️ Remover pedido (ADMIN)
+  async remove(req, res) {
+    try {
+      const { id } = req.params;
+
+      await prisma.pedido.delete({ where: { id: parseInt(id) } });
+      return res.json({ message: "Pedido removido com sucesso." });
+    } catch (error) {
+      console.error("❌ Erro ao remover pedido:", error.message);
+      return res.status(500).json({ error: "Erro ao remover pedido." });
     }
   }
 };
