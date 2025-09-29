@@ -1,9 +1,9 @@
 // controllers/pedido.js
-const prisma = require('../connect'); // usa o mesmo prisma do usuario.js
-const asaas = require("../../services/asaas"); // nossa instância configurada
+const prisma = require('../connect');
+const asaas = require("../../services/asaas"); // cliente axios do Asaas
 
 module.exports = {
-  // Criar pedido e gerar pagamento no Asaas
+  // 🛒 Criar pedido e gerar pagamento no Asaas
   async create(req, res) {
     try {
       const usuarioLogado = req.usuario;
@@ -40,10 +40,12 @@ module.exports = {
         0
       );
 
-      // 3️⃣ Criar ou buscar cliente no Asaas
+      // 3️⃣ Buscar ou criar cliente no Asaas
       let clienteAsaas;
       try {
-        const resp = await asaas.get("/customers", { params: { email: pedido.usuario.email } });
+        const resp = await asaas.get("/customers", {
+          params: { email: pedido.usuario.email }
+        });
         if (resp.data?.data?.length > 0) {
           clienteAsaas = resp.data.data[0];
         }
@@ -59,48 +61,59 @@ module.exports = {
         });
         clienteAsaas = respCreate.data;
       }
-      
-      // 4️⃣ Criar pagamento PIX no Asaas
+
+      // 4️⃣ Criar cobrança no Asaas
       const paymentResp = await asaas.post("/payments", {
         customer: clienteAsaas.id,
-        billingType: metodoPagamento || "PIX",
+        billingType: metodoPagamento || "PIX", // PIX, CREDIT_CARD ou BOLETO
         value: Number(valorTotal.toFixed(2)),
         dueDate: new Date().toISOString().split("T")[0],
         description: `Pedido #${pedido.id} - Petshop`,
         externalReference: `pedido_${pedido.id}`,
-        callbackUrl: "https://back-tcc.vercel.app/webhook/asaas" // opcional
+        callbackUrl: "https://back-tcc.vercel.app/webhook/asaas" // webhook opcional
       });
 
       const pagamento = paymentResp.data;
+
+      // 5️⃣ Atualizar status do pedido com referência do pagamento
+      await prisma.pedido.update({
+        where: { id: pedido.id },
+        data: {
+          status: "AGUARDANDO_PAGAMENTO"
+        }
+      });
 
       return res.status(201).json({
         message: "Pedido criado e cobrança gerada com sucesso.",
         pedido,
         pagamentoAsaas: pagamento,
         linkPagamento: pagamento.invoiceUrl || null,
-        pixQrCode: pagamento.pixQrCode || null,
+        pixQrCode: pagamento.pixQrCodeImage || null,
         pixCopiaCola: pagamento.pixCopiaECola || null
       });
 
     } catch (error) {
-      console.error("Erro ao criar pedido:", error.response?.data || error.message);
+      console.error("❌ Erro ao criar pedido:", error.response?.data || error.message);
       return res.status(500).json({
         error: "Erro ao criar pedido.",
-        detalhes: error.message,
+        detalhes: error.response?.data || error.message,
       });
     }
   },
 
-async listarPorUsuario(req, res) {
-  try {
-    const pedidos = await prisma.pedido.findMany({
-      where: { usuarioId: req.usuario.id },
-      include: { itens: { include: { produto: true } } }
-    });
-    res.json(pedidos);
-  } catch (error) {
-    res.status(500).json({ error: "Erro ao buscar seus pedidos." });
-  }
-}
+  // 📦 Listar pedidos do usuário autenticado
+  async listarPorUsuario(req, res) {
+    try {
+      const pedidos = await prisma.pedido.findMany({
+        where: { usuarioId: req.usuario.id },
+        include: { itens: { include: { produto: true } } },
+        orderBy: { createdAt: 'desc' }
+      });
 
+      return res.json(pedidos);
+    } catch (error) {
+      console.error("❌ Erro ao listar pedidos:", error.message);
+      return res.status(500).json({ error: "Erro ao buscar seus pedidos." });
+    }
+  }
 };
