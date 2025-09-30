@@ -7,11 +7,25 @@ require('dotenv').config();
 const prisma = new PrismaClient();
 const app = express();
 
+
+const allowedOrigins = [
+  'http://localhost:5500',
+  'https://erickaguiar06.github.io' 
+];
+
 app.use(cors({
-  origin: 'http://localhost:5500',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS bloqueado: origem não permitida'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+
 app.use(express.json());
 
 
