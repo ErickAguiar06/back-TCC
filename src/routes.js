@@ -1,46 +1,52 @@
-const express = require('express');
+const express = require("express");
 const rota = express.Router();
 
 // Controllers
-const usu = require('./controllers/usuario');
-const produto = require('./controllers/produto');
-const pedido = require('./controllers/pedido');
-const webhookController = require('./controllers/webhook');
+const usuarioController = require("./controllers/usuario");
+const produtoController = require("./controllers/produto");
+const pedidoController = require("./controllers/pedido");
+const webhookController = require("./controllers/webhook");
 
 // Middleware
-const { autenticarJWT, verificarAdmin } = require('./middleware/auth'); 
+const { autenticarJWT, verificarAdmin } = require("./middleware/auth");
 
-// Rotas de usuário
-rota.post('/usuarios', usu.create);              
-rota.post('/login', usu.login);                  
-rota.post('/recuperar-senha', usu.solicitarRecuperacao); 
-rota.post('/resetar-senha', usu.resetarSenha);
-rota.get('/usuarios', autenticarJWT, usu.listar); // 🔑 apenas ADMIN
+// Função utilitária para garantir que o handler existe
+function ensureFunction(fn, name) {
+  if (typeof fn !== "function") {
+    throw new Error(`Handler inválido: ${name} não é uma função. Verifique se está exportado corretamente no controller.`);
+  }
+  return fn;
+}
 
-// Rotas de produto
-rota.get('/produtos', produto.listar); 
-// ✅ qualquer pessoa (mesmo sem login) consegue ver os produtos
-rota.post('/produtos', autenticarJWT, verificarAdmin, produto.create); 
-// 🔒 apenas ADMIN cadastra
-rota.put('/produtos/:id', autenticarJWT, verificarAdmin, produto.update); 
-// 🔒 apenas ADMIN altera
-rota.delete('/produtos/:id', autenticarJWT, verificarAdmin, produto.remove); 
-// 🔒 apenas ADMIN exclui
+// ==============================
+// 👤 ROTAS DE USUÁRIO
+// ==============================
+rota.post("/usuarios", ensureFunction(usuarioController.create, "usuarioController.create"));
+rota.post("/login", ensureFunction(usuarioController.login, "usuarioController.login"));
+rota.post("/recuperar-senha", ensureFunction(usuarioController.solicitarRecuperacao, "usuarioController.solicitarRecuperacao"));
+rota.post("/resetar-senha", ensureFunction(usuarioController.resetarSenha, "usuarioController.resetarSenha"));
+rota.get("/usuarios", autenticarJWT, ensureFunction(usuarioController.listar, "usuarioController.listar")); // 🔒 ADMIN
 
-// Rotas de pedido
-rota.post('/pedidos', autenticarJWT, pedido.create); 
-// 🔒 qualquer usuário logado faz pedido
-rota.get('/pedidos', autenticarJWT, verificarAdmin, pedido.listarTodos); 
-// 🔒 apenas ADMIN lista todos os pedidos
-rota.put('/pedidos/:id', autenticarJWT, verificarAdmin, pedido.update); 
-// 🔒 apenas ADMIN altera pedidos
-rota.delete('/pedidos/:id', autenticarJWT, verificarAdmin, pedido.remove); 
-// 🔒 apenas ADMIN remove pedidos
+// ==============================
+// 📦 ROTAS DE PRODUTO
+// ==============================
+rota.get("/produtos", ensureFunction(produtoController.listar, "produtoController.listar"));
+rota.post("/produtos", autenticarJWT, verificarAdmin, ensureFunction(produtoController.create, "produtoController.create"));
+rota.put("/produtos/:id", autenticarJWT, verificarAdmin, ensureFunction(produtoController.update, "produtoController.update"));
+rota.delete("/produtos/:id", autenticarJWT, verificarAdmin, ensureFunction(produtoController.remove, "produtoController.remove"));
 
-// 🧠 Webhook do Asaas (não precisa de autenticação)
-rota.post('/webhook/asaas', express.json(), webhookController.receberWebhook);
+// ==============================
+// 🛒 ROTAS DE PEDIDO
+// ==============================
+rota.post("/pedidos", autenticarJWT, ensureFunction(pedidoController.criarPedido || pedidoController.create, "pedidoController.criarPedido/create"));
+rota.get("/pedidos", autenticarJWT, verificarAdmin, ensureFunction(pedidoController.listarTodos, "pedidoController.listarTodos"));
+rota.get("/meus-pedidos", autenticarJWT, ensureFunction(pedidoController.listarPorUsuario, "pedidoController.listarPorUsuario"));
+rota.put("/pedidos/:id", autenticarJWT, verificarAdmin, ensureFunction(pedidoController.update, "pedidoController.update"));
+rota.delete("/pedidos/:id", autenticarJWT, verificarAdmin, ensureFunction(pedidoController.remove, "pedidoController.remove"));
 
-// 🔒 qualquer usuário logado vê seus próprios pedidos
-rota.get('/meus-pedidos', autenticarJWT, pedido.listarPorUsuario);
+// ==============================
+// 📬 WEBHOOK ASAAS
+// ==============================
+rota.post("/webhook/asaas", express.json(), ensureFunction(webhookController.receberWebhook, "webhookController.receberWebhook"));
 
 module.exports = rota;

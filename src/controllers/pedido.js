@@ -1,169 +1,101 @@
-// controllers/pedido.js
-const prisma = require('../connect');
-const asaas = require("../../services/asaas");
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
-module.exports = {
-  async create(req, res) {
-    try {
-      const usuarioLogado = req.usuario;
-      if (!usuarioLogado?.id) {
-        return res.status(401).json({ error: "Usuário não autenticado." });
-      }
+// Criar novo pedido
+exports.criarPedido = async (req, res) => {
+  try {
+    const { itens } = req.body;
+    const usuarioId = req.user.id;
 
-      const { itens, metodoPagamento } = req.body;
-
-      if (!Array.isArray(itens) || itens.length === 0) {
-        return res.status(400).json({ error: "Itens do pedido inválidos." });
-      }
-
-      // 🔎 Verificar se todos os produtos existem
-      const produtosIds = itens.map(i => i.id);
-      const produtos = await prisma.produto.findMany({
-        where: { id: { in: produtosIds } }
-      });
-
-      if (produtos.length !== itens.length) {
-        return res.status(400).json({ error: "Alguns produtos não existem no sistema." });
-      }
-
-      // 🛍️ Criar pedido e itens no banco
-      const pedido = await prisma.pedido.create({
-        data: {
-          usuarioId: usuarioLogado.id,
-          itens: {
-            create: itens.map(item => ({
-              produtoId: item.id,
-              quantidade: item.quantidade
-            }))
-          }
+    const pedido = await prisma.pedido.create({
+      data: {
+        usuarioId,
+        itens: {
+          create: itens.map(item => ({
+            produtoId: item.produtoId,
+            quantidade: item.quantidade,
+          })),
         },
-        include: {
-          itens: { include: { produto: true } },
-          usuario: true
-        }
-      });
-
-      // 💰 Calcular total
-      const valorTotal = pedido.itens.reduce(
-        (acc, it) => acc + it.produto.preco * it.quantidade,
-        0
-      );
-
-      // 👤 Buscar ou criar cliente no Asaas
-      let clienteAsaas;
-      try {
-        const resp = await asaas.get("/customers", {
-          params: { email: pedido.usuario.email }
-        });
-        if (resp.data?.data?.length > 0) {
-          clienteAsaas = resp.data.data[0];
-        }
-      } catch (err) {
-        console.log("Cliente não encontrado no Asaas:", err.response?.data || err.message);
-      }
-
-      if (!clienteAsaas) {
-        const respCreate = await asaas.post("/customers", {
-          name: pedido.usuario.nome,
-          email: pedido.usuario.email,
-          mobilePhone: pedido.usuario.telefone || undefined,
-        });
-        clienteAsaas = respCreate.data;
-      }
-
-      // 🧾 Criar cobrança no Asaas
-      const paymentResp = await asaas.post("/payments", {
-        customer: clienteAsaas.id,
-        billingType: metodoPagamento || "PIX",
-        value: Number(valorTotal.toFixed(2)),
-        dueDate: new Date().toISOString().split("T")[0],
-        description: `Pedido #${pedido.id} - Petshop`,
-        externalReference: `pedido_${pedido.id}`,
-        callbackUrl: "https://back-tcc.vercel.app/webhook/asaas"
-      });
-
-      const pagamento = paymentResp.data;
-
-      // 🔄 Atualizar status do pedido
-      await prisma.pedido.update({
-        where: { id: pedido.id },
-        data: { status: "AGUARDANDO_PAGAMENTO" }
-      });
-
-      return res.status(201).json({
-        message: "Pedido criado e cobrança gerada com sucesso.",
-        pedido,
-        pagamentoAsaas: pagamento,
-        linkPagamento: pagamento.invoiceUrl || null,
-        pixQrCode: pagamento.pixQrCodeImage || null,
-        pixCopiaCola: pagamento.pixCopiaECola || null
-      });
-
-    } catch (error) {
-      console.error("❌ Erro ao criar pedido:", error.response?.data || error.message);
-      return res.status(500).json({
-        error: "Erro ao criar pedido.",
-        detalhes: error.response?.data || error.message,
-      });
-    }
-  },
-
-  async listarPorUsuario(req, res) {
-    try {
-      const pedidos = await prisma.pedido.findMany({
-        where: { usuarioId: req.usuario.id },
-        include: { itens: { include: { produto: true } } },
-        orderBy: { createdAt: 'desc' }
-      });
-      return res.json(pedidos);
-    } catch (error) {
-      console.error("❌ Erro ao listar pedidos:", error.message);
-      return res.status(500).json({ error: "Erro ao buscar seus pedidos." });
-    }
-  },
-
-  async listarTodos(req, res) {
-    try {
-      const pedidos = await prisma.pedido.findMany({
-        include: {
-          usuario: { select: { nome: true, email: true } },
-          itens: { include: { produto: true } }
+      },
+      include: {
+        itens: {
+          include: {
+            produto: true,
+          },
         },
-        orderBy: { createdAt: 'desc' }
-      });
-      return res.json(pedidos);
-    } catch (error) {
-      console.error("❌ Erro ao listar todos os pedidos:", error.message);
-      return res.status(500).json({ error: "Erro ao listar pedidos." });
-    }
-  },
+      },
+    });
 
-  async update(req, res) {
-    try {
-      const { id } = req.params;
-      const { status } = req.body;
+    res.status(201).json(pedido);
+  } catch (error) {
+    console.error("Erro ao criar pedido:", error);
+    res.status(500).json({ erro: "Erro ao criar pedido" });
+  }
+};
 
-      const pedidoAtualizado = await prisma.pedido.update({
-        where: { id: parseInt(id) },
-        data: { status },
-        include: { itens: { include: { produto: true } } }
-      });
+// ✅ Listar todos os pedidos (apenas ADMIN)
+exports.listarTodos = async (req, res) => {
+  try {
+    const pedidos = await prisma.pedido.findMany({
+      include: {
+        usuario: true,
+        itens: {
+          include: { produto: true },
+        },
+      },
+    });
+    res.json(pedidos);
+  } catch (error) {
+    console.error("Erro ao listar pedidos:", error);
+    res.status(500).json({ erro: "Erro ao listar pedidos" });
+  }
+};
 
-      return res.json(pedidoAtualizado);
-    } catch (error) {
-      console.error("❌ Erro ao atualizar pedido:", error.message);
-      return res.status(500).json({ error: "Erro ao atualizar pedido." });
-    }
-  },
+// ✅ Listar pedidos do usuário logado
+exports.listarPorUsuario = async (req, res) => {
+  try {
+    const usuarioId = req.user.id;
+    const pedidos = await prisma.pedido.findMany({
+      where: { usuarioId },
+      include: {
+        itens: { include: { produto: true } },
+      },
+    });
+    res.json(pedidos);
+  } catch (error) {
+    console.error("Erro ao listar meus pedidos:", error);
+    res.status(500).json({ erro: "Erro ao listar meus pedidos" });
+  }
+};
 
-  async remove(req, res) {
-    try {
-      const { id } = req.params;
-      await prisma.pedido.delete({ where: { id: parseInt(id) } });
-      return res.json({ message: "Pedido removido com sucesso." });
-    } catch (error) {
-      console.error("❌ Erro ao remover pedido:", error.message);
-      return res.status(500).json({ error: "Erro ao remover pedido." });
-    }
+// ✅ Atualizar status do pedido (apenas ADMIN)
+exports.update = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const pedido = await prisma.pedido.update({
+      where: { id: parseInt(id) },
+      data: { status },
+    });
+
+    res.json(pedido);
+  } catch (error) {
+    console.error("Erro ao atualizar pedido:", error);
+    res.status(500).json({ erro: "Erro ao atualizar pedido" });
+  }
+};
+
+// ✅ Remover pedido (apenas ADMIN)
+exports.remove = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.pedido.delete({
+      where: { id: parseInt(id) },
+    });
+    res.json({ mensagem: "Pedido removido com sucesso!" });
+  } catch (error) {
+    console.error("Erro ao remover pedido:", error);
+    res.status(500).json({ erro: "Erro ao remover pedido" });
   }
 };
