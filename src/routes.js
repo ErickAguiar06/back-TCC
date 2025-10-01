@@ -1,11 +1,12 @@
 const express = require("express");
 const rota = express.Router();
 
-// Controllers
-const usuarioController = require("./controllers/usuario");
-const produtoController = require("./controllers/produto");
-const pedidoController = require("./controllers/pedido");
-const webhookController = require("./controllers/webhook");
+// Controllers (arquivos sem sufixo "Controller")
+const usuario = require("./controllers/usuario");
+const produto = require("./controllers/produto");
+const pedido = require("./controllers/pedido");
+const pagamento = require("./controllers/pagamento");
+const webhook = require("./controllers/webhook");
 
 // Middleware
 const { autenticarJWT, verificarAdmin } = require("./middleware/auth");
@@ -21,32 +22,37 @@ function ensureFunction(fn, name) {
 // ==============================
 // 👤 ROTAS DE USUÁRIO
 // ==============================
-rota.post("/usuarios", ensureFunction(usuarioController.create, "usuarioController.create"));
-rota.post("/login", ensureFunction(usuarioController.login, "usuarioController.login"));
-rota.post("/recuperar-senha", ensureFunction(usuarioController.solicitarRecuperacao, "usuarioController.solicitarRecuperacao"));
-rota.post("/resetar-senha", ensureFunction(usuarioController.resetarSenha, "usuarioController.resetarSenha"));
-rota.get("/usuarios", autenticarJWT, ensureFunction(usuarioController.listar, "usuarioController.listar")); // 🔒 ADMIN
+rota.post("/usuarios", ensureFunction(usuario.create, "usuario.create"));
+rota.post("/login", ensureFunction(usuario.login, "usuario.login"));
+rota.post("/recuperar-senha", ensureFunction(usuario.solicitarRecuperacao, "usuario.solicitarRecuperacao"));
+rota.post("/resetar-senha", ensureFunction(usuario.resetarSenha, "usuario.resetarSenha"));
+rota.get("/usuarios", autenticarJWT, verificarAdmin, ensureFunction(usuario.listar, "usuario.listar")); // 🔒 ADMIN
 
 // ==============================
 // 📦 ROTAS DE PRODUTO
 // ==============================
-rota.get("/produtos", ensureFunction(produtoController.listar, "produtoController.listar"));
-rota.post("/produtos", autenticarJWT, verificarAdmin, ensureFunction(produtoController.create, "produtoController.create"));
-rota.put("/produtos/:id", autenticarJWT, verificarAdmin, ensureFunction(produtoController.update, "produtoController.update"));
-rota.delete("/produtos/:id", autenticarJWT, verificarAdmin, ensureFunction(produtoController.remove, "produtoController.remove"));
+rota.get("/produtos", ensureFunction(produto.listar, "produto.listar"));
+rota.post("/produtos", autenticarJWT, verificarAdmin, ensureFunction(produto.create, "produto.create"));
+rota.put("/produtos/:id", autenticarJWT, verificarAdmin, ensureFunction(produto.update, "produto.update"));
+rota.delete("/produtos/:id", autenticarJWT, verificarAdmin, ensureFunction(produto.remove, "produto.remove"));
 
 // ==============================
 // 🛒 ROTAS DE PEDIDO
 // ==============================
-rota.post("/pedidos", autenticarJWT, ensureFunction(pedidoController.criarPedido || pedidoController.create, "pedidoController.criarPedido/create"));
-rota.get("/pedidos", autenticarJWT, verificarAdmin, ensureFunction(pedidoController.listarTodos, "pedidoController.listarTodos"));
-rota.get("/meus-pedidos", autenticarJWT, ensureFunction(pedidoController.listarPorUsuario, "pedidoController.listarPorUsuario"));
-rota.put("/pedidos/:id", autenticarJWT, verificarAdmin, ensureFunction(pedidoController.update, "pedidoController.update"));
-rota.delete("/pedidos/:id", autenticarJWT, verificarAdmin, ensureFunction(pedidoController.remove, "pedidoController.remove"));
+rota.post("/pedidos", autenticarJWT, ensureFunction(pedido.criarPedido, "pedido.criarPedido"));
+rota.get("/pedidos", autenticarJWT, verificarAdmin, ensureFunction(pedido.listarTodos, "pedido.listarTodos"));
+rota.get("/meus-pedidos", autenticarJWT, ensureFunction(pedido.listarPorUsuario, "pedido.listarPorUsuario"));
+rota.put("/pedidos/:id", autenticarJWT, verificarAdmin, ensureFunction(pedido.update, "pedido.update"));
+rota.delete("/pedidos/:id", autenticarJWT, verificarAdmin, ensureFunction(pedido.remove, "pedido.remove"));
+
+// ==============================
+// 💳 ROTA DE PAGAMENTO
+// ==============================
+rota.post("/pagamentos", autenticarJWT, ensureFunction(pagamento.criarPagamento, "pagamento.criarPagamento"));
 
 // ==============================
 // 📬 WEBHOOK ASAAS
 // ==============================
-rota.post("/webhook/asaas", express.json(), ensureFunction(webhookController.receberWebhook, "webhookController.receberWebhook"));
+rota.post("/webhook/asaas", express.json(), ensureFunction(webhook.receberWebhook, "webhook.receberWebhook"));
 
 module.exports = rota;

@@ -1,15 +1,21 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Criar novo pedido
+// Criar novo pedido com status PENDENTE
 exports.criarPedido = async (req, res) => {
   try {
     const { itens } = req.body;
     const usuarioId = req.user.id;
 
+    if (!itens || !Array.isArray(itens) || itens.length === 0) {
+      return res.status(400).json({ erro: "Carrinho vazio ou inválido." });
+    }
+
+    // Criar pedido com status PENDENTE
     const pedido = await prisma.pedido.create({
       data: {
         usuarioId,
+        status: "PENDENTE",
         itens: {
           create: itens.map(item => ({
             produtoId: item.produtoId,
@@ -33,7 +39,7 @@ exports.criarPedido = async (req, res) => {
   }
 };
 
-// ✅ Listar todos os pedidos (apenas ADMIN)
+// Listar todos os pedidos (apenas ADMIN)
 exports.listarTodos = async (req, res) => {
   try {
     const pedidos = await prisma.pedido.findMany({
@@ -51,7 +57,7 @@ exports.listarTodos = async (req, res) => {
   }
 };
 
-// ✅ Listar pedidos do usuário logado
+// Listar pedidos do usuário logado
 exports.listarPorUsuario = async (req, res) => {
   try {
     const usuarioId = req.user.id;
@@ -68,7 +74,7 @@ exports.listarPorUsuario = async (req, res) => {
   }
 };
 
-// ✅ Atualizar status do pedido (apenas ADMIN)
+// Atualizar status do pedido (apenas ADMIN)
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
@@ -86,7 +92,7 @@ exports.update = async (req, res) => {
   }
 };
 
-// ✅ Remover pedido (apenas ADMIN)
+// Remover pedido (apenas ADMIN)
 exports.remove = async (req, res) => {
   try {
     const { id } = req.params;
