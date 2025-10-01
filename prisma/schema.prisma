@@ -28,6 +28,7 @@ model Produto {
   descricao String
   preco     Float
   imagem    String        
+  marca     String 
   itens     PedidoProduto[]
 }
 
