@@ -1,64 +1,118 @@
+// controllers/produto.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Criar produto (ADMIN)
+/**
+ * Criar produto (ADMIN)
+ * Espera body: { nome, descricao, preco, quantidade, imagem, marca }
+ */
 exports.create = async (req, res) => {
-  const { nome, descricao, preco, imagem, alt } = req.body;
-
   try {
+    const { nome, descricao = '', preco, quantidade = 0, imagem = '', marca = 'SemMarca' } = req.body;
+
+    if (!nome || preco === undefined) {
+      return res.status(400).json({ erro: 'Campos obrigatórios: nome e preco' });
+    }
+
+    const precoNum = Number(preco);
+    const quantidadeNum = Number(quantidade) || 0;
+
+    if (Number.isNaN(precoNum)) {
+      return res.status(400).json({ erro: 'Preço inválido' });
+    }
+
     const novoProduto = await prisma.produto.create({
       data: {
         nome,
         descricao,
-        preco: parseFloat(preco),
+        preco: precoNum,
+        quantidade: quantidadeNum,
         imagem,
-        alt,
+        marca,
       },
     });
-    res.status(201).json(novoProduto);
+
+    return res.status(201).json(novoProduto);
   } catch (error) {
-    console.error("Erro ao cadastrar produto:", error);
-    res.status(500).json({ erro: "Erro ao cadastrar produto.", detalhes: error.message });
+    console.error('Erro ao cadastrar produto:', error);
+    return res.status(500).json({ erro: 'Erro ao cadastrar produto.', detalhes: error.message });
   }
 };
 
-// Listar todos os produtos (público)
+/**
+ * Listar produtos
+ * Suporta filtro por marca via query: /produtos?marca=Magnus
+ */
 exports.listar = async (req, res) => {
   try {
-    const produtos = await prisma.produto.findMany();
-    res.status(200).json(produtos);
+    const { marca } = req.query;
+
+    const where = marca
+      ? {
+          where: {
+            marca: { equals: marca, mode: 'insensitive' }
+          }
+        }
+      : {};
+
+    const produtos = await prisma.produto.findMany(where);
+    return res.status(200).json(produtos);
   } catch (error) {
-    console.error("Erro ao buscar produtos:", error);
-    res.status(500).json({ erro: "Erro ao buscar produtos." });
+    console.error('Erro ao buscar produtos:', error);
+    return res.status(500).json({ erro: 'Erro ao buscar produtos.' });
   }
 };
 
-// Atualizar produto (ADMIN)
+/**
+ * Atualizar produto (ADMIN)
+ * Params: id
+ * Body: campos a atualizar { nome, descricao, preco, quantidade, imagem, marca }
+ */
 exports.update = async (req, res) => {
-  const { id } = req.params;
-  const { nome, descricao, preco, imagem, alt } = req.body;
-
   try {
+    const { id } = req.params;
+    const { nome, descricao, preco, quantidade, imagem, marca } = req.body;
+
+    const dadosAtualizar = {};
+
+    if (nome !== undefined) dadosAtualizar.nome = nome;
+    if (descricao !== undefined) dadosAtualizar.descricao = descricao;
+    if (preco !== undefined) {
+      const precoNum = Number(preco);
+      if (Number.isNaN(precoNum)) return res.status(400).json({ erro: 'Preço inválido' });
+      dadosAtualizar.preco = precoNum;
+    }
+    if (quantidade !== undefined) {
+      const quantidadeNum = Number(quantidade);
+      if (Number.isNaN(quantidadeNum)) return res.status(400).json({ erro: 'Quantidade inválida' });
+      dadosAtualizar.quantidade = quantidadeNum;
+    }
+    if (imagem !== undefined) dadosAtualizar.imagem = imagem;
+    if (marca !== undefined) dadosAtualizar.marca = marca;
+
     const produtoAtualizado = await prisma.produto.update({
-      where: { id: parseInt(id) },
-      data: { nome, descricao, preco: parseFloat(preco), imagem, alt },
+      where: { id: Number(id) },
+      data: dadosAtualizar,
     });
-    res.json(produtoAtualizado);
+
+    return res.json(produtoAtualizado);
   } catch (error) {
-    console.error("Erro ao atualizar produto:", error);
-    res.status(500).json({ erro: "Erro ao atualizar produto.", detalhes: error.message });
+    console.error('Erro ao atualizar produto:', error);
+    return res.status(500).json({ erro: 'Erro ao atualizar produto.', detalhes: error.message });
   }
 };
 
-// Remover produto (ADMIN)
+/**
+ * Remover produto (ADMIN)
+ * Params: id
+ */
 exports.remove = async (req, res) => {
-  const { id } = req.params;
-
   try {
-    await prisma.produto.delete({ where: { id: parseInt(id) } });
-    res.json({ mensagem: "Produto removido com sucesso." });
+    const { id } = req.params;
+    await prisma.produto.delete({ where: { id: Number(id) } });
+    return res.json({ mensagem: 'Produto removido com sucesso.' });
   } catch (error) {
-    console.error("Erro ao remover produto:", error);
-    res.status(500).json({ erro: "Erro ao remover produto.", detalhes: error.message });
+    console.error('Erro ao remover produto:', error);
+    return res.status(500).json({ erro: 'Erro ao remover produto.', detalhes: error.message });
   }
 };
