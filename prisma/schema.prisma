@@ -28,17 +28,7 @@ model Produto {
   descricao String
   preco     Float
   imagem    String        
-  marca     String 
   itens     PedidoProduto[]
-  agendamentos Agendamento[]
-}
-
-model Agendamento {
-  id         Int      @id @default(autoincrement())
-  produto_id Int
-  data       DateTime
-  hora       String
-  produto    Produto  @relation(fields: [produto_id], references: [id])
 }
 
 model Pedido {

@@ -6,7 +6,6 @@ const usu = require('./controllers/usuario');
 const produto = require('./controllers/produto');
 const pedido = require('./controllers/pedido');
 const webhookController = require('./controllers/webhook');
-const agendamentoController = require('./controllers/agendamento');
 
 // Middleware
 const { autenticarJWT, verificarAdmin } = require('./middleware/auth'); 
@@ -43,8 +42,5 @@ rota.post('/webhook/asaas', express.json(), webhookController.receberWebhook);
 
 // 🔒 qualquer usuário logado vê seus próprios pedidos
 rota.get('/meus-pedidos', autenticarJWT, pedido.listarPorUsuario);
-
-// Rotas de agendamento
-router.post('/agendamentos', agendamentoController.criarAgendamento);
 
 module.exports = rota;
