@@ -1,9 +1,8 @@
 // controllers/pedido.js
 const prisma = require('../connect');
-const asaas = require("../../services/asaas"); // cliente axios do Asaas
+const asaas = require("../../services/asaas");
 
 module.exports = {
-  // 🛒 Criar pedido e gerar pagamento no Asaas
   async create(req, res) {
     try {
       const usuarioLogado = req.usuario;
@@ -17,30 +16,40 @@ module.exports = {
         return res.status(400).json({ error: "Itens do pedido inválidos." });
       }
 
-      // 1️⃣ Criar pedido no banco
+      // 🔎 Verificar se todos os produtos existem
+      const produtosIds = itens.map(i => i.id);
+      const produtos = await prisma.produto.findMany({
+        where: { id: { in: produtosIds } }
+      });
+
+      if (produtos.length !== itens.length) {
+        return res.status(400).json({ error: "Alguns produtos não existem no sistema." });
+      }
+
+      // 🛍️ Criar pedido e itens no banco
       const pedido = await prisma.pedido.create({
         data: {
           usuarioId: usuarioLogado.id,
           itens: {
             create: itens.map(item => ({
               produtoId: item.id,
-              quantidade: item.quantidade,
-            })),
-          },
+              quantidade: item.quantidade
+            }))
+          }
         },
         include: {
           itens: { include: { produto: true } },
-          usuario: true,
-        },
+          usuario: true
+        }
       });
 
-      // 2️⃣ Calcular valor total
+      // 💰 Calcular total
       const valorTotal = pedido.itens.reduce(
         (acc, it) => acc + it.produto.preco * it.quantidade,
         0
       );
 
-      // 3️⃣ Buscar ou criar cliente no Asaas
+      // 👤 Buscar ou criar cliente no Asaas
       let clienteAsaas;
       try {
         const resp = await asaas.get("/customers", {
@@ -50,7 +59,7 @@ module.exports = {
           clienteAsaas = resp.data.data[0];
         }
       } catch (err) {
-        console.warn("Cliente não encontrado no Asaas:", err.response?.data || err.message);
+        console.log("Cliente não encontrado no Asaas:", err.response?.data || err.message);
       }
 
       if (!clienteAsaas) {
@@ -62,10 +71,10 @@ module.exports = {
         clienteAsaas = respCreate.data;
       }
 
-      // 4️⃣ Criar cobrança no Asaas
+      // 🧾 Criar cobrança no Asaas
       const paymentResp = await asaas.post("/payments", {
         customer: clienteAsaas.id,
-        billingType: metodoPagamento || "PIX", // PIX, CREDIT_CARD ou BOLETO
+        billingType: metodoPagamento || "PIX",
         value: Number(valorTotal.toFixed(2)),
         dueDate: new Date().toISOString().split("T")[0],
         description: `Pedido #${pedido.id} - Petshop`,
@@ -75,7 +84,7 @@ module.exports = {
 
       const pagamento = paymentResp.data;
 
-      // 5️⃣ Atualizar status do pedido
+      // 🔄 Atualizar status do pedido
       await prisma.pedido.update({
         where: { id: pedido.id },
         data: { status: "AGUARDANDO_PAGAMENTO" }
@@ -99,7 +108,6 @@ module.exports = {
     }
   },
 
-  // 📦 Listar pedidos do usuário autenticado
   async listarPorUsuario(req, res) {
     try {
       const pedidos = await prisma.pedido.findMany({
@@ -114,7 +122,6 @@ module.exports = {
     }
   },
 
-  // 📜 Listar todos os pedidos (ADMIN)
   async listarTodos(req, res) {
     try {
       const pedidos = await prisma.pedido.findMany({
@@ -131,7 +138,6 @@ module.exports = {
     }
   },
 
-  // ✏️ Atualizar pedido (ADMIN)
   async update(req, res) {
     try {
       const { id } = req.params;
@@ -150,11 +156,9 @@ module.exports = {
     }
   },
 
-  // 🗑️ Remover pedido (ADMIN)
   async remove(req, res) {
     try {
       const { id } = req.params;
-
       await prisma.pedido.delete({ where: { id: parseInt(id) } });
       return res.json({ message: "Pedido removido com sucesso." });
     } catch (error) {
