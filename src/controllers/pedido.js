@@ -5,21 +5,51 @@ const prisma = new PrismaClient();
 exports.criarPedido = async (req, res) => {
   try {
     const { itens } = req.body;
-    const usuarioId = req.user.id;
+
+    // Suporta tanto req.user quanto req.usuario (fallback)
+    const usuarioId = req.user?.id || req.usuario?.id;
+    if (!usuarioId) {
+      return res.status(401).json({ erro: "Usuário não autenticado (token inválido ou middleware não definiu req.user)." });
+    }
 
     if (!itens || !Array.isArray(itens) || itens.length === 0) {
       return res.status(400).json({ erro: "Carrinho vazio ou inválido." });
     }
 
-    // Criar pedido com status PENDENTE
+    // Valida formato dos itens e converte
+    const itensValidados = itens.map((it) => {
+      const produtoId = Number(it.produtoId ?? it.id ?? it.produto_id);
+      const quantidade = Number(it.quantidade ?? it.qtd ?? it.qty ?? 0);
+      return { produtoId, quantidade };
+    });
+
+    for (const it of itensValidados) {
+      if (!it.produtoId || it.quantidade <= 0) {
+        return res.status(400).json({ erro: "Formato inválido de item. Cada item precisa de produtoId e quantidade > 0." });
+      }
+    }
+
+    // Verifica se os produtos existem no banco
+    const ids = [...new Set(itensValidados.map(i => i.produtoId))];
+    const produtosEncontrados = await prisma.produto.findMany({
+      where: { id: { in: ids } },
+      select: { id: true }
+    });
+    const encontradosIds = produtosEncontrados.map(p => p.id);
+    const faltantes = ids.filter(id => !encontradosIds.includes(id));
+    if (faltantes.length > 0) {
+      return res.status(400).json({ erro: `Produtos não encontrados: ${faltantes.join(", ")}` });
+    }
+
+    // Criar pedido com itens (transação implícita)
     const pedido = await prisma.pedido.create({
       data: {
         usuarioId,
         status: "PENDENTE",
         itens: {
-          create: itens.map(item => ({
-            produtoId: item.produtoId,
-            quantidade: item.quantidade,
+          create: itensValidados.map(it => ({
+            produtoId: it.produtoId,
+            quantidade: it.quantidade,
           })),
         },
       },
@@ -32,10 +62,14 @@ exports.criarPedido = async (req, res) => {
       },
     });
 
-    res.status(201).json(pedido);
+    return res.status(201).json(pedido);
   } catch (error) {
-    console.error("Erro ao criar pedido:", error);
-    res.status(500).json({ erro: "Erro ao criar pedido" });
+    console.error("Erro ao criar pedido (detalhe):", error);
+    // Retorna a mensagem de erro para ajudar no debug (remova em produção)
+    return res.status(500).json({
+      erro: "Erro ao criar pedido",
+      detalhes: error.message ?? String(error),
+    });
   }
 };
 
