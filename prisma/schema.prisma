@@ -15,21 +15,25 @@ enum Tipo {
 model Usuario {
   id        Int      @id @default(autoincrement())
   nome      String
-  email     String   @unique
+  email     String   @unique // ✅ Força UNIQUE no email (sync vai adicionar constraint)
   telefone  String?
   senha     String
-  tipo      String   @default("CLIENTE") // ADMIN, CLIENTE
-  cpf       String?  @unique // Adicione esta linha
+  tipo      String   @default("CLIENTE") // ✅ String simples, não enum. Default "CLIENTE"
+  cpf       String? // Opcional
   pedidos   Pedido[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("Usuario") // Nome da tabela no banco
 }
 
 model Produto {
-  id        Int              @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   nome      String
   descricao String
   preco     Float
-  imagem    String        
-  marca     String 
+  imagem    String
+  marca     String
   itens     PedidoProduto[]
 }
 
