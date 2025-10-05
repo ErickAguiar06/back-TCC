@@ -7,24 +7,19 @@ generator client {
   provider = "prisma-client-js"
 }
 
-enum Tipo {
-  ADMIN
-  CLIENTE
-}
-
 model Usuario {
   id        Int      @id @default(autoincrement())
   nome      String
-  email     String   @unique // ✅ Força UNIQUE no email (sync vai adicionar constraint)
+  email     String   @unique
   telefone  String?
   senha     String
-  tipo      String   @default("CLIENTE") // ✅ String simples, não enum. Default "CLIENTE"
-  cpf       String? // Opcional
+  tipo      String   @default("CLIENTE")
+  cpf       String?
   pedidos   Pedido[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("Usuario") // Nome da tabela no banco
+  @@map("Usuario")
 }
 
 model Produto {
