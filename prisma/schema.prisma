@@ -1,52 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 model Usuario {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   nome      String
-  email     String   @unique
-  telefone  String?
+  email     String    @unique
+  telefone  String
   senha     String
-  tipo      String   @default("CLIENTE")
-  cpf       String?
+  tipo      String    @default("CLIENTE")
+  cpf       String?   @unique @db.VarChar(14)
+  createdAt DateTime? @default(now()) @db.Timestamp(6)
+  updatedAt DateTime? @default(now()) @updatedAt @db.Timestamp(6)
   pedidos   Pedido[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@map("Usuario")
 }
 
 model Produto {
-  id        Int             @id @default(autoincrement())
-  nome      String
-  descricao String
-  preco     Float
-  imagem    String
-  marca     String
-  itens     PedidoProduto[]
+  id          Int           @id @default(autoincrement())
+  nome        String        @db.VarChar(255)
+  descricao   String?
+  preco       Decimal       @db.Decimal(10, 2)
+  quantidade  Int?          @default(0)
+  imagem      String?
+  marca       String        @default("SemMarca") @db.VarChar(100)
+  created_at  DateTime?     @default(now()) @db.Timestamp(6)
+  Agendamento Agendamento[]
 }
 
 model Pedido {
   id        Int             @id @default(autoincrement())
   usuarioId Int
-  usuario   Usuario         @relation(fields: [usuarioId], references: [id])
-  itens     PedidoProduto[]
   status    String          @default("PENDENTE")
   createdAt DateTime        @default(now())
+  usuario   Usuario         @relation(fields: [usuarioId], references: [id])
+  itens     PedidoProduto[]
 }
 
 model PedidoProduto {
-  id         Int @id @default(autoincrement())
+  id         Int    @id @default(autoincrement())
   pedidoId   Int
   produtoId  Int
   quantidade Int
+  pedido     Pedido @relation(fields: [pedidoId], references: [id])
+}
 
-  pedido  Pedido  @relation(fields: [pedidoId], references: [id])
-  produto Produto @relation(fields: [produtoId], references: [id])
+model Agendamento {
+  id          Int      @id(map: "agendamento_pkey") @default(autoincrement())
+  produto_id  Int
+  data        DateTime @db.Date
+  hora        DateTime @db.Time(6)
+  agendado_em DateTime @default(now()) @db.Timestamp(6)
+  Produto     Produto  @relation(fields: [produto_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "agendamento_produto_id_fkey")
+}
+
+enum Tipo {
+  ADMIN
+  CLIENTE
 }
