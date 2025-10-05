@@ -6,14 +6,20 @@ const bcrypt = require('bcrypt'); // ✅ importando bcrypt
 const SECRET = process.env.JWT_SECRET || 'secreta';
 const SECRET_RECUPERACAO = process.env.JWT_SECRET_RECUPERACAO || 'recuperar_senha';
 
-// Configuração do envio de e-mail
-const transporter = nodemailer.createTransporter({
+// Configuração do envio de e-mail (com verificação para evitar crash se env vars ausentes)
+let transporter;
+try {
+  transporter = nodemailer.createTransport({  // ✅ Corrigido: createTransport (não createTransporter)
     service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
     }
-});
+  });
+} catch (err) {
+  console.warn("⚠️ Configuração de email falhou (env vars ausentes?). Recuperação de senha pode não funcionar.");
+  transporter = null;  // Define como null para evitar crashes em funções que usam email
+}
 
 // Listar todos os usuários (somente ADMIN)
 const listar = async (req, res) => {
@@ -43,7 +49,7 @@ const create = async (req, res) => {
 
     const saltRounds = 10;
     const senhaHash = await bcrypt.hash(senha, saltRounds);
-    console.log("🔐 Senha hasheada para novo usuário:", senhaHash.substring(0, 20) + "..."); // Log parcial para debug (não mostra senha completa)
+    console.log("🔐 Senha hasheada para novo usuário:", senhaHash.substring(0, 20) + "..."); // Log parcial para debug
 
     const usuario = await prisma.usuario.create({
       data: {
@@ -111,16 +117,20 @@ const login = async (req, res) => {
 // Solicitar recuperação de senha
 const solicitarRecuperacao = async (req, res) => {
   const { email } = req.body;
-  const usuario = await prisma.usuario.findUnique({ where: { email } });
-
-  if (!usuario) {
-    return res.status(200).json({ message: 'Se o email estiver cadastrado, você receberá instruções.' });
-  }
-
-  const tokenRecuperacao = jwt.sign({ id: usuario.id }, SECRET_RECUPERACAO, { expiresIn: '15m' });
-  const link = `http://localhost:5500/resetar-senha.html?token=${tokenRecuperacao}`;
-
   try {
+    const usuario = await prisma.usuario.findUnique({ where: { email } });
+
+    if (!usuario) {
+      return res.status(200).json({ message: 'Se o email estiver cadastrado, você receberá instruções.' });
+    }
+
+    if (!transporter) {
+      return res.status(500).json({ message: 'Serviço de email não configurado no momento.' });
+    }
+
+    const tokenRecuperacao = jwt.sign({ id: usuario.id }, SECRET_RECUPERACAO, { expiresIn: '15m' });
+    const link = `http://localhost:5500/resetar-senha.html?token=${tokenRecuperacao}`;
+
     await transporter.sendMail({
       from: '"4 Patas PetShop" <naoresponda@4patas.com>',
       to: email,
@@ -132,6 +142,7 @@ const solicitarRecuperacao = async (req, res) => {
 
     res.status(200).json({ message: 'Se o email estiver cadastrado, você receberá instruções.' });
   } catch (err) {
+    console.error("❌ Erro na recuperação de senha:", err);
     res.status(500).json({ message: 'Erro ao enviar email de recuperação.' });
   }
 };
@@ -152,6 +163,7 @@ const resetarSenha = async (req, res) => {
 
     res.status(200).json({ message: 'Senha redefinida com sucesso!' });
   } catch (err) {
+    console.error("❌ Erro ao resetar senha:", err);
     res.status(400).json({ message: 'Token inválido ou expirado.' });
   }
 };
