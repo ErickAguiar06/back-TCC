@@ -13,13 +13,14 @@ enum Tipo {
 }
 
 model Usuario {
-  id       Int      @id @default(autoincrement())
-  nome     String
-  email    String   @unique
-  telefone String
-  senha    String
-  tipo     Tipo     @default(CLIENTE) // padrão será CLIENTE
-  pedidos  Pedido[]
+  id        Int      @id @default(autoincrement())
+  nome      String
+  email     String   @unique
+  telefone  String?
+  senha     String
+  tipo      String   @default("CLIENTE") // ADMIN, CLIENTE
+  cpf       String?  @unique // Adicione esta linha
+  pedidos   Pedido[]
 }
 
 model Produto {

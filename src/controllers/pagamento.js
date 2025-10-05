@@ -3,7 +3,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
-const ASAAS_API_URL = "https://www.asaas.com/api/v3";
+const ASAAS_API_URL = process.env.ASAAS_BASE_URL || "https://sandbox.asaas.com/api/v3"; // ✅ Usa .env (sandbox por default)
 
 exports.criarPagamento = async (req, res) => {
   try {
@@ -59,7 +59,7 @@ exports.criarPagamento = async (req, res) => {
     let clienteId;
     try {
       const clienteBusca = await axios.get(`${ASAAS_API_URL}/customers?externalReference=${usuarioId}`, {
-        headers: { access_token: ASAAS_API_KEY },
+        headers: { access_token: ASAAS_API_KEY }, // ✅ Correto para Asaas
       });
 
       if (clienteBusca.data?.data?.length > 0) {
@@ -71,21 +71,28 @@ exports.criarPagamento = async (req, res) => {
 
     // ✅ 6. Cria cliente no Asaas se não existir
     if (!clienteId) {
+      // ✅ Validação obrigatória: CPF deve existir (removido fallback inválido)
+      if (!usuario.cpf) {
+        return res.status(400).json({ 
+          message: "CPF não cadastrado. Por favor, adicione seu CPF no perfil ou cadastre-se novamente." 
+        });
+      }
+
       const clienteResponse = await axios.post(
         `${ASAAS_API_URL}/customers`,
         {
           name: usuario.nome,
           email: usuario.email,
-          cpfCnpj: usuario.cpf || "00000000000", // Ajuste: se não tiver CPF no banco
+          cpfCnpj: usuario.cpf, // ✅ Usa o CPF real (deve ser válido)
           phone: usuario.telefone || "",
           externalReference: String(usuarioId),
         },
         {
-          headers: { access_token: ASAAS_API_KEY },
+          headers: { access_token: ASAAS_API_KEY }, // ✅ Padronizado para Asaas (não Bearer)
         }
       );
-
       clienteId = clienteResponse.data.id;
+      console.log("✅ Cliente criado no Asaas:", clienteId); // Log para debug
     }
 
     // ✅ 7. Cria cobrança no Asaas
@@ -107,11 +114,12 @@ exports.criarPagamento = async (req, res) => {
         externalReference: `pedido_${pedidoId}`,
       },
       {
-        headers: { access_token: ASAAS_API_KEY },
+        headers: { access_token: ASAAS_API_KEY }, // ✅ Correto
       }
     );
 
     const cobranca = cobrancaResponse.data;
+    console.log("✅ Cobrança criada no Asaas:", cobranca.id); // Log para debug
 
     // ✅ 8. Retorna dados para o front exibir
     return res.status(201).json({
@@ -121,14 +129,29 @@ exports.criarPagamento = async (req, res) => {
       paymentId: cobranca.id,
     });
   } catch (error) {
-    console.error(
-      "Erro ao criar pagamento Asaas:",
-      error.response?.data || error.message || error
-    );
-
-    return res.status(500).json({
-      message: "Erro ao criar pagamento.",
-      detalhe: error.response?.data || error.message,
-    });
+    console.error("❌ Erro ao criar pagamento Asaas:");
+    if (error.response) {
+      // Erro de resposta do Asaas (ex: 400, 401, 422)
+      console.error("  Status:", error.response.status);
+      console.error("  Dados do erro:", error.response.data); // Detalhes do Asaas
+      return res.status(error.response.status).json({
+        message: "Erro na API do Asaas.",
+        detalhe: error.response.data,
+      });
+    } else if (error.request) {
+      // Erro de rede (sem resposta)
+      console.error("  Erro de conexão:", error.request);
+      return res.status(500).json({
+        message: "Erro de conexão com o Asaas.",
+        detalhe: error.message,
+      });
+    } else {
+      // Erro interno (ex: validação)
+      console.error("  Erro interno:", error.message);
+      return res.status(500).json({
+        message: "Erro interno ao processar pagamento.",
+        detalhe: error.message,
+      });
+    }
   }
 };

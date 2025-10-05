@@ -34,25 +34,27 @@ const listar = async (req, res) => {
 
 // Criar usuário com hash de senha
 const create = async (req, res) => {
-    const { nome, email, telefone, senha, tipo } = req.body;
-    try {
-        const saltRounds = 10;
-        const senhaHash = await bcrypt.hash(senha, saltRounds);
-
-        const usuario = await prisma.usuario.create({
-            data: { 
-                nome, 
-                email, 
-                telefone, 
-                senha: senhaHash, // salva hash
-                tipo: tipo || "CLIENTE"
-            },
-        });
-        res.status(201).json(usuario);
-    } catch (err) {
-        res.status(400).json(err);
-    }
-};
+        const { nome, email, telefone, senha, tipo, cpf } = req.body;
+        try {
+            const saltRounds = 10;
+            const senhaHash = await bcrypt.hash(senha, saltRounds);
+            const usuario = await prisma.usuario.create({
+                data: {
+                    nome,
+                    email,
+                    telefone,
+                    senha: senhaHash,
+                    tipo: tipo || "CLIENTE",
+                    cpf: cpf 
+                },
+            });
+            res.status(201).json(usuario);
+        } catch (err) {
+            // Adicione um log mais detalhado para ver o erro do Prisma
+            console.error("Erro ao criar usuário:", err);
+            res.status(400).json({ message: "Erro ao criar usuário.", details: err.message });
+        }
+    };
 
 // Login com comparação de hash
 const login = async (req, res) => {
