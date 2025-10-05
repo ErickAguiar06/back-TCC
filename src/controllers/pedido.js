@@ -1,71 +1,66 @@
+// controllers/pedido.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Criar novo pedido com status PENDENTE
+// Criar novo pedido
 exports.criarPedido = async (req, res) => {
   try {
     const { itens } = req.body;
 
-    // Suporta tanto req.user quanto req.usuario (fallback)
     const usuarioId = req.user?.id || req.usuario?.id;
     if (!usuarioId) {
-      return res.status(401).json({ erro: "Usuário não autenticado (token inválido ou middleware não definiu req.user)." });
+      return res.status(401).json({ erro: "Usuário não autenticado." });
     }
 
-    if (!itens || !Array.isArray(itens) || itens.length === 0) {
+    if (!Array.isArray(itens) || itens.length === 0) {
       return res.status(400).json({ erro: "Carrinho vazio ou inválido." });
     }
 
-    // Valida formato dos itens e converte
-    const itensValidados = itens.map((it) => {
-      const produtoId = Number(it.produtoId ?? it.id ?? it.produto_id);
-      const quantidade = Number(it.quantidade ?? it.qtd ?? it.qty ?? 0);
-      return { produtoId, quantidade };
-    });
+    // Validação dos itens
+    const itensValidados = itens.map(it => ({
+      produtoId: Number(it.produtoId ?? it.id),
+      quantidade: Number(it.quantidade ?? it.qtd ?? 0),
+    }));
 
     for (const it of itensValidados) {
       if (!it.produtoId || it.quantidade <= 0) {
-        return res.status(400).json({ erro: "Formato inválido de item. Cada item precisa de produtoId e quantidade > 0." });
+        return res.status(400).json({ erro: "Cada item precisa de produtoId e quantidade > 0." });
       }
     }
 
-    // Verifica se os produtos existem no banco
-    const ids = [...new Set(itensValidados.map(i => i.produtoId))];
-    const produtosEncontrados = await prisma.produto.findMany({
+    // Verifica se os produtos existem
+    const ids = itensValidados.map(i => i.produtoId);
+    const produtosExistentes = await prisma.produto.findMany({
       where: { id: { in: ids } },
       select: { id: true }
     });
-    const encontradosIds = produtosEncontrados.map(p => p.id);
-    const faltantes = ids.filter(id => !encontradosIds.includes(id));
+
+    const idsEncontrados = produtosExistentes.map(p => p.id);
+    const faltantes = ids.filter(id => !idsEncontrados.includes(id));
     if (faltantes.length > 0) {
       return res.status(400).json({ erro: `Produtos não encontrados: ${faltantes.join(", ")}` });
     }
 
-    // Criar pedido com itens (transação implícita)
+    // Criar pedido com itens
     const pedido = await prisma.pedido.create({
       data: {
         usuarioId,
         status: "PENDENTE",
         itens: {
-          create: itensValidados.map(it => ({
-            produtoId: it.produtoId,
-            quantidade: it.quantidade,
-          })),
-        },
+          create: itensValidados
+        }
       },
       include: {
+        usuario: true,
         itens: {
-          include: {
-            produto: true,
-          },
-        },
-      },
+          include: { produto: true } // ✅ Agora isso vai funcionar
+        }
+      }
     });
 
     return res.status(201).json(pedido);
   } catch (error) {
-    console.error("Erro ao criar pedido (detalhe):", error);
-    // Retorna a mensagem de erro para ajudar no debug (remova em produção)
+    console.error("❌ Erro ao criar pedido:", error);
     return res.status(500).json({
       erro: "Erro ao criar pedido",
       detalhes: error.message ?? String(error),
@@ -73,69 +68,70 @@ exports.criarPedido = async (req, res) => {
   }
 };
 
-// Listar todos os pedidos (apenas ADMIN)
+// Listar todos os pedidos (ADMIN)
 exports.listarTodos = async (req, res) => {
   try {
     const pedidos = await prisma.pedido.findMany({
       include: {
         usuario: true,
-        itens: {
-          include: { produto: true },
-        },
+        itens: { include: { produto: true } }
       },
+      orderBy: { createdAt: 'desc' }
     });
-    res.json(pedidos);
+    return res.json(pedidos);
   } catch (error) {
     console.error("Erro ao listar pedidos:", error);
-    res.status(500).json({ erro: "Erro ao listar pedidos" });
+    return res.status(500).json({ erro: "Erro ao listar pedidos" });
   }
 };
 
 // Listar pedidos do usuário logado
 exports.listarPorUsuario = async (req, res) => {
   try {
-    const usuarioId = req.user.id;
+    const usuarioId = req.user?.id;
+    if (!usuarioId) return res.status(401).json({ erro: "Usuário não autenticado." });
+
     const pedidos = await prisma.pedido.findMany({
       where: { usuarioId },
       include: {
-        itens: { include: { produto: true } },
+        itens: { include: { produto: true } }
       },
+      orderBy: { createdAt: 'desc' }
     });
-    res.json(pedidos);
+
+    return res.json(pedidos);
   } catch (error) {
     console.error("Erro ao listar meus pedidos:", error);
-    res.status(500).json({ erro: "Erro ao listar meus pedidos" });
+    return res.status(500).json({ erro: "Erro ao listar meus pedidos" });
   }
 };
 
-// Atualizar status do pedido (apenas ADMIN)
+// Atualizar status do pedido (ADMIN)
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
     const pedido = await prisma.pedido.update({
-      where: { id: parseInt(id) },
+      where: { id: Number(id) },
       data: { status },
     });
 
-    res.json(pedido);
+    return res.json(pedido);
   } catch (error) {
     console.error("Erro ao atualizar pedido:", error);
-    res.status(500).json({ erro: "Erro ao atualizar pedido" });
+    return res.status(500).json({ erro: "Erro ao atualizar pedido" });
   }
 };
 
-// Remover pedido (apenas ADMIN)
+// Remover pedido (ADMIN)
 exports.remove = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.pedido.delete({
-      where: { id: parseInt(id) },
-    });
-    res.json({ mensagem: "Pedido removido com sucesso!" });
+    await prisma.pedido.delete({ where: { id: Number(id) } });
+    return res.json({ mensagem: "Pedido removido com sucesso!" });
   } catch (error) {
     console.error("Erro ao remover pedido:", error);
-    res.status(500).json({ erro: "Erro ao remover pedido" });
+    return res.status(500).json({ erro: "Erro ao remover pedido" });
   }
 };
