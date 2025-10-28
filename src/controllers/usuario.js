@@ -132,7 +132,7 @@ const solicitarRecuperacao = async (req, res) => {
 
     const msg = {
         to: email,
-        from: 'naoresponda@4patas.com', // ✅ Use um email verificado no SendGrid (ou seu domínio)
+        from: 'petshop4patas.oficial01@gmail.com', // ✅ Use um email verificado no SendGrid (ou seu domínio)
         subject: 'Recuperação de Senha - 4 Patas PetShop',
         html: `<p>Você solicitou a recuperação de senha.</p>
                <p><a href="${link}">Clique aqui para redefinir sua senha</a></p>
