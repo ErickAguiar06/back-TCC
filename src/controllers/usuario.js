@@ -1,19 +1,13 @@
 const prisma = require('../connect');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-const bcrypt = require('bcrypt'); // ✅ importando bcrypt
+const sgMail = require('@sendgrid/mail'); // ✅ Substituindo nodemailer por SendGrid
+const bcrypt = require('bcrypt');
 
 const SECRET = process.env.JWT_SECRET || 'secreta';
 const SECRET_RECUPERACAO = process.env.JWT_SECRET_RECUPERACAO || 'recuperar_senha';
 
-// Configuração do envio de e-mail
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
+// Configuração do SendGrid
+sgMail.setApiKey(process.env.SENDGRID_API_KEY); // ✅ Usa a chave do SendGrid das env vars
 
 // Listar todos os usuários (somente ADMIN)
 const listar = async (req, res) => {
@@ -23,7 +17,7 @@ const listar = async (req, res) => {
     }
 
     const usuarios = await prisma.usuario.findMany({
-      select: { id: true, nome: true, email: true, telefone: true, tipo: true }
+      select: { id: true, nome: true, cpf: true, email: true, telefone: true, tipo: true } // ✅ Adicionei cpf no select, caso queira exibir
     });
     res.json(usuarios);
   } catch (error) {
@@ -34,7 +28,7 @@ const listar = async (req, res) => {
 
 // Criar usuário com hash de senha
 const create = async (req, res) => {
-    const { nome, email, telefone, senha, tipo } = req.body;
+    const { nome, cpf, email, telefone, senha, tipo } = req.body; // ✅ Adicionei cpf
     try {
         const saltRounds = 10;
         const senhaHash = await bcrypt.hash(senha, saltRounds);
@@ -42,15 +36,17 @@ const create = async (req, res) => {
         const usuario = await prisma.usuario.create({
             data: { 
                 nome, 
+                cpf, // ✅ Incluindo cpf
                 email, 
                 telefone, 
                 senha: senhaHash, // salva hash
                 tipo: tipo || "CLIENTE"
             },
         });
-        res.status(201).json(usuario);
+        res.status(201).json({ message: "Usuário criado com sucesso!", usuario: { id: usuario.id, nome, email, tipo } }); // ✅ Retorno mais limpo (sem senha)
     } catch (err) {
-        res.status(400).json(err);
+        console.error(err);
+        res.status(400).json({ message: "Erro ao criar usuário. Verifique os dados." });
     }
 };
 
@@ -64,7 +60,7 @@ const login = async (req, res) => {
             return res.status(401).json({ message: 'Email ou senha inválidos.' });
         }
 
-        const senhaValida = await bcrypt.compare(senha, usuario.senha); // ✅ compara hash
+        const senhaValida = await bcrypt.compare(senha, usuario.senha);
         if (!senhaValida) {
             return res.status(401).json({ message: 'Email ou senha inválidos.' });
         }
@@ -77,7 +73,8 @@ const login = async (req, res) => {
         res.status(200).json({ message: 'Login bem-sucedido', token, tipo: usuario.tipo });
 
     } catch (err) {
-        res.status(400).json(err);
+        console.error(err);
+        res.status(400).json({ message: "Erro interno no login." });
     }
 };
 
@@ -91,20 +88,22 @@ const solicitarRecuperacao = async (req, res) => {
     }
 
     const tokenRecuperacao = jwt.sign({ id: usuario.id }, SECRET_RECUPERACAO, { expiresIn: '15m' });
-    const link = `http://localhost:5500/resetar-senha.html?token=${tokenRecuperacao}`;
+    const link = `https://erickaguiar06.github.io/front-TCC/resetar-senha.html?token=${tokenRecuperacao}`;
+
+    const msg = {
+        to: email,
+        from: 'naoresponda@4patas.com', // ✅ Use um email verificado no SendGrid (ou seu domínio)
+        subject: 'Recuperação de Senha - 4 Patas PetShop',
+        html: `<p>Você solicitou a recuperação de senha.</p>
+               <p><a href="${link}">Clique aqui para redefinir sua senha</a></p>
+               <p>Este link expira em 15 minutos.</p>`
+    };
 
     try {
-        await transporter.sendMail({
-            from: '"4 Patas PetShop" <naoresponda@4patas.com>',
-            to: email,
-            subject: 'Recuperação de Senha',
-            html: `<p>Você solicitou a recuperação de senha.</p>
-                   <p><a href="${link}">Clique aqui para redefinir sua senha</a></p>
-                   <p>Este link expira em 15 minutos.</p>`
-        });
-
+        await sgMail.send(msg); // ✅ Envio via SendGrid
         res.status(200).json({ message: 'Se o email estiver cadastrado, você receberá instruções.' });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ message: 'Erro ao enviar email de recuperação.' });
     }
 };
@@ -120,11 +119,12 @@ const resetarSenha = async (req, res) => {
 
         await prisma.usuario.update({
             where: { id: decoded.id },
-            data: { senha: senhaHash } // salva hash
+            data: { senha: senhaHash }
         });
 
         res.status(200).json({ message: 'Senha redefinida com sucesso!' });
     } catch (err) {
+        console.error(err);
         res.status(400).json({ message: 'Token inválido ou expirado.' });
     }
 };
