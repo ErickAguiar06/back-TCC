@@ -1,13 +1,13 @@
 const prisma = require('../connect');
 const jwt = require('jsonwebtoken');
-const sgMail = require('@sendgrid/mail'); // ✅ Substituindo nodemailer por SendGrid
+const sgMail = require('@sendgrid/mail'); // ✅ SendGrid para envio de email
 const bcrypt = require('bcrypt');
 
 const SECRET = process.env.JWT_SECRET || 'secreta';
 const SECRET_RECUPERACAO = process.env.JWT_SECRET_RECUPERACAO || 'recuperar_senha';
 
 // Configuração do SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY); // ✅ Usa a chave do SendGrid das env vars
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // Listar todos os usuários (somente ADMIN)
 const listar = async (req, res) => {
@@ -17,7 +17,7 @@ const listar = async (req, res) => {
     }
 
     const usuarios = await prisma.usuario.findMany({
-      select: { id: true, nome: true, cpf: true, email: true, telefone: true, tipo: true } // ✅ Adicionei cpf no select, caso queira exibir
+      select: { id: true, nome: true, cpf: true, email: true, telefone: true, tipo: true }
     });
     res.json(usuarios);
   } catch (error) {
@@ -28,68 +28,58 @@ const listar = async (req, res) => {
 
 // Criar usuário com hash de senha
 const create = async (req, res) => {
-
+  const { nome, email, telefone, senha, tipo, cpf } = req.body; // ✅ Desestruturação corrigida
+  try {
     const saltRounds = 10;
     const senhaHash = await bcrypt.hash(senha, saltRounds);
-    console.log("🔐 Senha hasheada para novo usuário:", senhaHash.substring(0, 20) + "..."); // Log parcial para debug
 
     const usuario = await prisma.usuario.create({
-      data: {
-        nome,
-        email,
-        telefone,
+      data: { 
+        nome, 
+        cpf, // ✅ Incluindo cpf
+        email, 
+        telefone, 
         senha: senhaHash,
-        tipo: tipo || "CLIENTE",
-        cpf: cpf || null // Permite null se não fornecido
+        tipo: tipo || "CLIENTE"
       },
     });
-    console.log("✅ Usuário criado com sucesso:", usuario.id, usuario.email); // Log para debug
-    res.status(201).json(usuario);
+    res.status(201).json({ message: "Usuário criado com sucesso!", usuario: { id: usuario.id, nome, email, tipo } });
   } catch (err) {
-    console.error("❌ Erro ao criar usuário:", err); // Log detalhado
+    console.error("Erro ao criar usuário:", err);
     if (err.code === 'P2002') { // Erro de duplicata (email ou cpf único)
       const mensagem = err.meta?.target?.includes('email') ? "E-mail já cadastrado." : "CPF já cadastrado.";
-      return res.status(409).json({ message: mensagem }); // 409 para conflito
+      return res.status(409).json({ message: mensagem });
     }
-    res.status(400).json({ message: "Erro ao criar usuário.", details: err.message });
-  };
+    res.status(400).json({ message: "Erro ao criar usuário." });
+  }
+};
 
 // Login com comparação de hash
 const login = async (req, res) => {
   const { email, senha } = req.body;
   try {
-    // Busca o usuário no banco de dados
     const usuario = await prisma.usuario.findUnique({ where: { email } });
 
-    console.log("👤 Usuário encontrado:", usuario ? `ID ${usuario.id}` : "NÃO ENCONTRADO");
-
     if (!usuario) {
-      console.log("❌ Email não encontrado no banco.");
       return res.status(401).json({ message: 'Email ou senha inválidos.' });
     }
 
     const senhaValida = await bcrypt.compare(senha, usuario.senha);
-    console.log("🔑 Comparação de senha:", senhaValida ? "VÁLIDA" : "INVÁLIDA");
-
     if (!senhaValida) {
-      console.log("❌ Senha incorreta.");
       return res.status(401).json({ message: 'Email ou senha inválidos.' });
     }
 
     const token = jwt.sign(
-      { id: usuario.id, email: usuario.email, tipo: usuario.tipo },
-      SECRET,
+      { id: usuario.id, email: usuario.email, tipo: usuario.tipo }, 
+      SECRET, 
       { expiresIn: '2h' }
     );
-
-    console.log("✅ Login bem-sucedido para:", usuario.email);
     res.status(200).json({ message: 'Login bem-sucedido', token, tipo: usuario.tipo });
   } catch (err) {
-    console.error("❌ Erro interno no login:", err);
-    res.status(500).json({ message: 'Erro interno no servidor. Tente novamente.' });
+    console.error("Erro no login:", err);
+    res.status(400).json({ message: "Erro interno no login." });
   }
 };
-
 
 // Solicitar recuperação de senha
 const solicitarRecuperacao = async (req, res) => {
@@ -101,29 +91,24 @@ const solicitarRecuperacao = async (req, res) => {
       return res.status(200).json({ message: 'Se o email estiver cadastrado, você receberá instruções.' });
     }
 
-    if (!transporter) {
-      return res.status(500).json({ message: 'Serviço de email não configurado no momento.' });
-    }
-
     const tokenRecuperacao = jwt.sign({ id: usuario.id }, SECRET_RECUPERACAO, { expiresIn: '15m' });
     const link = `https://erickaguiar06.github.io/front-TCC/resetar-senha.html?token=${tokenRecuperacao}`;
 
     const msg = {
-        to: email,
-        from: 'petshop4patas.oficial01@gmail.com', // ✅ Use um email verificado no SendGrid (ou seu domínio)
-        subject: 'Recuperação de Senha - 4 Patas PetShop',
-        html: `<p>Você solicitou a recuperação de senha.</p>
-               <p><a href="${link}">Clique aqui para redefinir sua senha</a></p>
-               <p>Este link expira em 15 minutos.</p>`
+      to: email,
+      from: 'petshop4patas.oficial01@gmail.com', // ✅ Email verificado no SendGrid
+      subject: 'Recuperação de Senha - 4 Patas PetShop',
+      html: `<p>Você solicitou a recuperação de senha.</p>
+             <p><a href="${link}">Clique aqui para redefinir sua senha</a></p>
+             <p>Este link expira em 15 minutos.</p>`
     };
 
-    try {
-        await sgMail.send(msg); // ✅ Envio via SendGrid
-        res.status(200).json({ message: 'Se o email estiver cadastrado, você receberá instruções.' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Erro ao enviar email de recuperação.' });
-    }
+    await sgMail.send(msg);
+    res.status(200).json({ message: 'Se o email estiver cadastrado, você receberá instruções.' });
+  } catch (err) {
+    console.error("Erro ao enviar email:", err);
+    res.status(500).json({ message: 'Erro ao enviar email de recuperação.' });
+  }
 };
 
 // Resetar senha com hash
@@ -135,22 +120,22 @@ const resetarSenha = async (req, res) => {
     const saltRounds = 10;
     const senhaHash = await bcrypt.hash(novaSenha, saltRounds);
 
-        await prisma.usuario.update({
-            where: { id: decoded.id },
-            data: { senha: senhaHash }
-        });
+    await prisma.usuario.update({
+      where: { id: decoded.id },
+      data: { senha: senhaHash }
+    });
 
-        res.status(200).json({ message: 'Senha redefinida com sucesso!' });
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ message: 'Token inválido ou expirado.' });
-    }
+    res.status(200).json({ message: 'Senha redefinida com sucesso!' });
+  } catch (err) {
+    console.error("Erro no reset:", err);
+    res.status(400).json({ message: 'Token inválido ou expirado.' });
+  }
 };
 
 module.exports = {
-    listar,
-    create,
-    login,
-    solicitarRecuperacao,
-    resetarSenha
+  listar,
+  create,
+  login,
+  solicitarRecuperacao,
+  resetarSenha
 };
