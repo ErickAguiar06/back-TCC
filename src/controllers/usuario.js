@@ -52,66 +52,44 @@ const create = async (req, res) => {
       return res.status(409).json({ message: mensagem }); // 409 para conflito
     }
     res.status(400).json({ message: "Erro ao criar usuário.", details: err.message });
-  }
-};
+  };
 
 // Login com comparação de hash
 const login = async (req, res) => {
   const { email, senha } = req.body;
   try {
-    console.log("🔍 Tentativa de login para email:", email); // Log para debug
-
-        if (!usuario) {
-            return res.status(401).json({ message: 'Email ou senha inválidos.' });
-        }
-
-        const senhaValida = await bcrypt.compare(senha, usuario.senha);
-        if (!senhaValida) {
-            return res.status(401).json({ message: 'Email ou senha inválidos.' });
-        }
-
-        const token = jwt.sign(
-            { id: usuario.id, email: usuario.email, tipo: usuario.tipo }, 
-            SECRET, 
-            { expiresIn: '2h' }
-        );
-        res.status(200).json({ message: 'Login bem-sucedido', token, tipo: usuario.tipo });
-
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ message: "Erro interno no login." });
-    }
-
+    // Busca o usuário no banco de dados
     const usuario = await prisma.usuario.findUnique({ where: { email } });
-    console.log("👤 Usuário encontrado:", usuario ? `ID ${usuario.id}` : "NÃO ENCONTRADO"); // Log para debug
+
+    console.log("👤 Usuário encontrado:", usuario ? `ID ${usuario.id}` : "NÃO ENCONTRADO");
 
     if (!usuario) {
-      console.log("❌ Email não encontrado no banco."); // Log
+      console.log("❌ Email não encontrado no banco.");
       return res.status(401).json({ message: 'Email ou senha inválidos.' });
     }
 
     const senhaValida = await bcrypt.compare(senha, usuario.senha);
-    console.log("🔑 Comparação de senha:", senhaValida ? "VÁLIDA" : "INVÁLIDA"); // Log para debug
+    console.log("🔑 Comparação de senha:", senhaValida ? "VÁLIDA" : "INVÁLIDA");
 
     if (!senhaValida) {
-      console.log("❌ Senha incorreta."); // Log
+      console.log("❌ Senha incorreta.");
       return res.status(401).json({ message: 'Email ou senha inválidos.' });
     }
 
     const token = jwt.sign(
-      { id: usuario.id, email: usuario.email, tipo: usuario.tipo }, 
-      SECRET, 
+      { id: usuario.id, email: usuario.email, tipo: usuario.tipo },
+      SECRET,
       { expiresIn: '2h' }
     );
-    console.log("✅ Login bem-sucedido para:", usuario.email); // Log
-    res.status(200).json({ message: 'Login bem-sucedido', token, tipo: usuario.tipo });
 
+    console.log("✅ Login bem-sucedido para:", usuario.email);
+    res.status(200).json({ message: 'Login bem-sucedido', token, tipo: usuario.tipo });
   } catch (err) {
-    console.error("❌ Erro interno no login:", err); // Log detalhado
-    // Não retorna o erro inteiro para segurança — só uma mensagem genérica
+    console.error("❌ Erro interno no login:", err);
     res.status(500).json({ message: 'Erro interno no servidor. Tente novamente.' });
   }
 };
+
 
 // Solicitar recuperação de senha
 const solicitarRecuperacao = async (req, res) => {
