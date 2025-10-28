@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 
 /**
  * Criar produto (ADMIN)
- * Espera body: { nome, descricao, preco, quantidade, imagem, marca }
+ * Body esperado: { nome, descricao, preco, quantidade, imagem, marca }
  */
 exports.create = async (req, res) => {
   try {
@@ -32,16 +32,20 @@ exports.create = async (req, res) => {
       },
     });
 
-    return res.status(201).json(novoProduto);
+    // ✅ Converte preco para Number antes de enviar
+    return res.status(201).json({
+      ...novoProduto,
+      preco: Number(novoProduto.preco)
+    });
   } catch (error) {
-    console.error('Erro ao cadastrar produto:', error);
+    console.error('❌ Erro ao cadastrar produto:', error);
     return res.status(500).json({ erro: 'Erro ao cadastrar produto.', detalhes: error.message });
   }
 };
 
 /**
- * Listar produtos
- * Suporta filtro por marca via query: /produtos?marca=Magnus
+ * Listar produtos (com suporte a filtro por marca via query)
+ * Ex: GET /produtos?marca=Magnus
  */
 exports.listar = async (req, res) => {
   try {
@@ -56,10 +60,17 @@ exports.listar = async (req, res) => {
       : {};
 
     const produtos = await prisma.produto.findMany(where);
-    return res.status(200).json(produtos);
+
+    // ✅ Converte preco para Number antes de retornar
+    const produtosConvertidos = produtos.map(p => ({
+      ...p,
+      preco: Number(p.preco)
+    }));
+
+    return res.status(200).json(produtosConvertidos);
   } catch (error) {
-    console.error('Erro ao buscar produtos:', error);
-    return res.status(500).json({ erro: 'Erro ao buscar produtos.' });
+    console.error('❌ Erro ao buscar produtos:', error);
+    return res.status(500).json({ erro: 'Erro ao buscar produtos.', detalhes: error.message });
   }
 };
 
@@ -95,9 +106,12 @@ exports.update = async (req, res) => {
       data: dadosAtualizar,
     });
 
-    return res.json(produtoAtualizado);
+    return res.json({
+      ...produtoAtualizado,
+      preco: Number(produtoAtualizado.preco)
+    });
   } catch (error) {
-    console.error('Erro ao atualizar produto:', error);
+    console.error('❌ Erro ao atualizar produto:', error);
     return res.status(500).json({ erro: 'Erro ao atualizar produto.', detalhes: error.message });
   }
 };
@@ -112,7 +126,7 @@ exports.remove = async (req, res) => {
     await prisma.produto.delete({ where: { id: Number(id) } });
     return res.json({ mensagem: 'Produto removido com sucesso.' });
   } catch (error) {
-    console.error('Erro ao remover produto:', error);
+    console.error('❌ Erro ao remover produto:', error);
     return res.status(500).json({ erro: 'Erro ao remover produto.', detalhes: error.message });
   }
 };

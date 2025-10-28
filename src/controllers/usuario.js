@@ -28,33 +28,38 @@ const listar = async (req, res) => {
 
 // Criar usuário com hash de senha
 const create = async (req, res) => {
-    const { nome, cpf, email, telefone, senha, tipo } = req.body; // ✅ Adicionei cpf
-    try {
-        const saltRounds = 10;
-        const senhaHash = await bcrypt.hash(senha, saltRounds);
 
-        const usuario = await prisma.usuario.create({
-            data: { 
-                nome, 
-                cpf, // ✅ Incluindo cpf
-                email, 
-                telefone, 
-                senha: senhaHash, // salva hash
-                tipo: tipo || "CLIENTE"
-            },
-        });
-        res.status(201).json({ message: "Usuário criado com sucesso!", usuario: { id: usuario.id, nome, email, tipo } }); // ✅ Retorno mais limpo (sem senha)
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ message: "Erro ao criar usuário. Verifique os dados." });
+    const saltRounds = 10;
+    const senhaHash = await bcrypt.hash(senha, saltRounds);
+    console.log("🔐 Senha hasheada para novo usuário:", senhaHash.substring(0, 20) + "..."); // Log parcial para debug
+
+    const usuario = await prisma.usuario.create({
+      data: {
+        nome,
+        email,
+        telefone,
+        senha: senhaHash,
+        tipo: tipo || "CLIENTE",
+        cpf: cpf || null // Permite null se não fornecido
+      },
+    });
+    console.log("✅ Usuário criado com sucesso:", usuario.id, usuario.email); // Log para debug
+    res.status(201).json(usuario);
+  } catch (err) {
+    console.error("❌ Erro ao criar usuário:", err); // Log detalhado
+    if (err.code === 'P2002') { // Erro de duplicata (email ou cpf único)
+      const mensagem = err.meta?.target?.includes('email') ? "E-mail já cadastrado." : "CPF já cadastrado.";
+      return res.status(409).json({ message: mensagem }); // 409 para conflito
     }
+    res.status(400).json({ message: "Erro ao criar usuário.", details: err.message });
+  }
 };
 
 // Login com comparação de hash
 const login = async (req, res) => {
-    const { email, senha } = req.body;
-    try {
-        const usuario = await prisma.usuario.findUnique({ where: { email } });
+  const { email, senha } = req.body;
+  try {
+    console.log("🔍 Tentativa de login para email:", email); // Log para debug
 
         if (!usuario) {
             return res.status(401).json({ message: 'Email ou senha inválidos.' });
@@ -76,15 +81,50 @@ const login = async (req, res) => {
         console.error(err);
         res.status(400).json({ message: "Erro interno no login." });
     }
+
+    const usuario = await prisma.usuario.findUnique({ where: { email } });
+    console.log("👤 Usuário encontrado:", usuario ? `ID ${usuario.id}` : "NÃO ENCONTRADO"); // Log para debug
+
+    if (!usuario) {
+      console.log("❌ Email não encontrado no banco."); // Log
+      return res.status(401).json({ message: 'Email ou senha inválidos.' });
+    }
+
+    const senhaValida = await bcrypt.compare(senha, usuario.senha);
+    console.log("🔑 Comparação de senha:", senhaValida ? "VÁLIDA" : "INVÁLIDA"); // Log para debug
+
+    if (!senhaValida) {
+      console.log("❌ Senha incorreta."); // Log
+      return res.status(401).json({ message: 'Email ou senha inválidos.' });
+    }
+
+    const token = jwt.sign(
+      { id: usuario.id, email: usuario.email, tipo: usuario.tipo }, 
+      SECRET, 
+      { expiresIn: '2h' }
+    );
+    console.log("✅ Login bem-sucedido para:", usuario.email); // Log
+    res.status(200).json({ message: 'Login bem-sucedido', token, tipo: usuario.tipo });
+
+  } catch (err) {
+    console.error("❌ Erro interno no login:", err); // Log detalhado
+    // Não retorna o erro inteiro para segurança — só uma mensagem genérica
+    res.status(500).json({ message: 'Erro interno no servidor. Tente novamente.' });
+  }
 };
 
 // Solicitar recuperação de senha
 const solicitarRecuperacao = async (req, res) => {
-    const { email } = req.body;
+  const { email } = req.body;
+  try {
     const usuario = await prisma.usuario.findUnique({ where: { email } });
 
     if (!usuario) {
-        return res.status(200).json({ message: 'Se o email estiver cadastrado, você receberá instruções.' });
+      return res.status(200).json({ message: 'Se o email estiver cadastrado, você receberá instruções.' });
+    }
+
+    if (!transporter) {
+      return res.status(500).json({ message: 'Serviço de email não configurado no momento.' });
     }
 
     const tokenRecuperacao = jwt.sign({ id: usuario.id }, SECRET_RECUPERACAO, { expiresIn: '15m' });
@@ -110,12 +150,12 @@ const solicitarRecuperacao = async (req, res) => {
 
 // Resetar senha com hash
 const resetarSenha = async (req, res) => {
-    const { token, novaSenha } = req.body;
-    try {
-        const decoded = jwt.verify(token, SECRET_RECUPERACAO);
+  const { token, novaSenha } = req.body;
+  try {
+    const decoded = jwt.verify(token, SECRET_RECUPERACAO);
 
-        const saltRounds = 10;
-        const senhaHash = await bcrypt.hash(novaSenha, saltRounds);
+    const saltRounds = 10;
+    const senhaHash = await bcrypt.hash(novaSenha, saltRounds);
 
         await prisma.usuario.update({
             where: { id: decoded.id },
