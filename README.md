@@ -2,9 +2,8 @@
 
 ```bash
 cd api
-npm i prisma -g 
+npm i prisma -g (caso não tenha o prisma global baixado)
 npm init -y
-npm i express cors dotenv
 npx prisma init --datasource-provider mysql
 ```
 
@@ -13,26 +12,25 @@ npx prisma init --datasource-provider mysql
 npm install express cors dotenv prisma jsonwebtoken nodemailer bcrypt
 ```
 
-# Necessário
+# Necessário para teste local
 - Altere o endereço do arquivo **.env** para:   
 ```js
-STRIPE_SECRET_KEY=(chave secreta da conta Stripe)
+ASAAS_API_KEY=(chave secreta da conta Asaas)
+ASAAS_BASE_URL="https://sandbox.asaas.com/api/v3" (para ambiente sandbox, caso seja real altere isso)
+SENDGRID_API_KEY=(chave da api)  (essa api é para chegar mensagem no email)
 DATABASE_URL="mysql://root@localhost:3306/petshop?schema=public&timezone=UTC"
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=465
-EMAIL_USER=petshop4patas.oficial01@gmail.com
-EMAIL_PASS=###########
 
-```
-# Se necessário use:
-```bash
-npx prisma generate
 ```
 
 # Migrations
 - Faremos a migração do banco de dados para o MySQL através do comando a seguir no terminal
 ```bash
 npx prisma migrate dev --name init
+```
+
+# Se necessário use:
+```bash
+npx prisma generate
 ```
 
 # Para adicionar os produtos no banco
